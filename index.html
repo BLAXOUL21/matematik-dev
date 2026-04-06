@@ -2,294 +2,191 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Fraction Shooter Prototip</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kesir Ödevi - İnteraktif Kontrol</title>
     <style>
         body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #2c3e50;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
             margin: 0;
-            overflow: hidden;
-            background: radial-gradient(circle, #1a1a2e, #16213e);
-            font-family: sans-serif;
             touch-action: none;
         }
 
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
+        .container {
+            background: #34495e;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            width: 85%;
+            max-width: 400px;
+        }
+
+        .display-area {
+            font-size: 3rem;
+            margin: 20px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .line {
+            width: 100px;
+            height: 4px;
+            background: white;
+            margin: 5px 0;
         }
 
         canvas {
-            display: block;
+            background: white;
+            border-radius: 50%;
+            margin-top: 20px;
+            border: 5px solid #1abc9c;
         }
 
-        /* Mobil Kontroller */
+        .hint {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #bdc3c7;
+        }
+
+        /* Mobil Butonlar */
         .controls {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            padding: 0 30px;
-            box-sizing: border-box;
-            pointer-events: none;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
         }
 
-        .joystick-area {
-            width: 120px;
-            height: 120px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            position: relative;
-            pointer-events: auto;
-        }
-
-        #joystick-stick {
-            width: 50px;
-            height: 50px;
-            background: #e94560;
-            border-radius: 50%;
-            position: absolute;
-            top: 35px;
-            left: 35px;
-        }
-
-        .action-buttons {
+        .btn-group {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            pointer-events: auto;
+            gap: 5px;
         }
 
-        .btn {
-            width: 70px;
-            height: 70px;
-            border-radius: 15px;
+        button {
+            padding: 15px;
             border: none;
-            background: #0f3460;
+            border-radius: 10px;
+            background: #1abc9c;
             color: white;
             font-weight: bold;
             font-size: 1.2rem;
-            box-shadow: 0 4px #08203e;
             cursor: pointer;
         }
 
-        .btn:active {
-            transform: translateY(4px);
-            box-shadow: none;
-        }
-
-        /* Skor ve Bilgi */
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: #4dfaff;
-            font-size: 1.2rem;
-            text-shadow: 2px 2px #000;
-        }
-
-        /* Yanıp Sönen LED Efekti (Kritik Düşmanlar İçin) */
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-        }
-        .led-blink {
-            animation: blink 0.2s infinite;
-        }
+        button:active { background: #16a085; }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <div id="ui">Puan: <span id="score">0</span></div>
-    <canvas id="gameCanvas"></canvas>
+<div class="container">
+    <h2>Kesir Kaşifi</h2>
     
+    <div class="display-area">
+        <div id="disp-pay">1</div>
+        <div class="line"></div>
+        <div id="disp-payda">4</div>
+    </div>
+
+    <canvas id="pieCanvas" width="180" height="180"></canvas>
+
     <div class="controls">
-        <div class="joystick-area" id="joystick-base">
-            <div id="joystick-stick"></div>
+        <div class="btn-group">
+            <small>PAY (↑ / ↓)</small>
+            <button onclick="changePay(1)">+</button>
+            <button onclick="changePay(-1)">-</button>
         </div>
-        
-        <div class="action-buttons">
-            <button class="btn" onclick="shoot(1/2)">1/2</button>
-            <button class="btn" onclick="shoot(1/4)">1/4</button>
-            <button class="btn" onclick="shoot(1/5)">1/5</button>
+        <div class="btn-group">
+            <small>PAYDA (→ / ←)</small>
+            <button onclick="changePayda(1)">+</button>
+            <button onclick="changePayda(-1)">-</button>
         </div>
+    </div>
+
+    <div class="hint">
+        Klavyede <b>Ok Tuşlarını</b> kullanabilirsin.
     </div>
 </div>
 
 <script>
-    const canvas = document.getElementById('gameCanvas');
+    let pay = 1;
+    let payda = 4;
+
+    const canvas = document.getElementById('pieCanvas');
     const ctx = canvas.getContext('2d');
-    const scoreEl = document.getElementById('score');
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    let score = 0;
-    const player = { x: canvas.width/2, y: canvas.height/2, size: 20, color: '#4dfaff', angle: 0 };
-    const enemies = [];
-    const bullets = [];
-
-    // Joystick Mantığı
-    let moveDir = { x: 0, y: 0 };
-    const stick = document.getElementById('joystick-stick');
-    const base = document.getElementById('joystick-base');
-
-    base.addEventListener('touchstart', handleTouch);
-    base.addEventListener('touchmove', handleTouch);
-    base.addEventListener('touchend', () => {
-        stick.style.left = '35px';
-        stick.style.top = '35px';
-        moveDir = { x: 0, y: 0 };
+    // Klavye Kontrolü (Ok Tuşları)
+    window.addEventListener('keydown', (e) => {
+        if (e.key === "ArrowUp") changePay(1);
+        if (e.key === "ArrowDown") changePay(-1);
+        if (e.key === "ArrowRight") changePayda(1);
+        if (e.key === "ArrowLeft") changePayda(-1);
     });
 
-    function handleTouch(e) {
-        const touch = e.touches[0];
-        const rect = base.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        
-        let dx = touch.clientX - centerX;
-        let dy = touch.clientY - centerY;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        const maxDist = 40;
-
-        if (dist > maxDist) {
-            dx *= maxDist / dist;
-            dy *= maxDist / dist;
-        }
-
-        stick.style.left = (35 + dx) + 'px';
-        stick.style.top = (35 + dy) + 'px';
-        
-        moveDir.x = dx / maxDist;
-        moveDir.y = dy / maxDist;
-        player.angle = Math.atan2(dy, dx);
+    function changePay(val) {
+        pay += val;
+        if (pay < 0) pay = 0;
+        if (pay > payda) pay = payda; // Basit kesir ödevi için pay paydayı geçmesin
+        update();
     }
 
-    // Düşman Oluşturma
-    function spawnEnemy() {
-        const size = 30 + Math.random() * 20;
-        let x, y;
-        if (Math.random() < 0.5) {
-            x = Math.random() < 0.5 ? 0 : canvas.width;
-            y = Math.random() * canvas.height;
-        } else {
-            x = Math.random() * canvas.width;
-            y = Math.random() < 0.5 ? 0 : canvas.height;
-        }
-        
-        // Düşman canı 10, 20 veya 40 gibi tam sayılar
-        const healthOptions = [10, 20, 40, 50, 100];
-        const health = healthOptions[Math.floor(Math.random() * healthOptions.length)];
-        
-        enemies.push({ x, y, health, maxHealth: health, size });
+    function changePayda(val) {
+        payda += val;
+        if (payda < 1) payda = 1;
+        if (pay > payda) pay = payda;
+        update();
     }
-
-    // Ateş Etme
-    window.shoot = function(fraction) {
-        bullets.push({
-            x: player.x,
-            y: player.y,
-            vx: Math.cos(player.angle) * 7,
-            vy: Math.sin(player.angle) * 7,
-            val: fraction
-        });
-    };
 
     function update() {
-        // Oyuncu hareketi
-        player.x += moveDir.x * 4;
-        player.y += moveDir.y * 4;
-
-        // Mermiler
-        bullets.forEach((b, i) => {
-            b.x += b.vx;
-            b.y += b.vy;
-            if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
-        });
-
-        // Düşmanlar
-        enemies.forEach((en, i) => {
-            const dx = player.x - en.x;
-            const dy = player.y - en.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            en.x += dx / dist * 1.5;
-            en.y += dy / dist * 1.5;
-
-            // Çarpışma Kontrolü
-            bullets.forEach((b, bi) => {
-                const bDist = Math.sqrt((b.x - en.x)**2 + (b.y - en.y)**2);
-                if (bDist < en.size) {
-                    en.health = Math.floor(en.health * b.val); // Kesirle çarpma
-                    bullets.splice(bi, 1);
-                    if (en.health <= 1) {
-                        enemies.splice(i, 1);
-                        score += 10;
-                        scoreEl.innerText = score;
-                    }
-                }
-            });
-        });
-
-        if (Math.random() < 0.01) spawnEnemy();
+        document.getElementById('disp-pay').innerText = pay;
+        document.getElementById('disp-payda').innerText = payda;
+        draw();
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const r = 75;
 
-        // Oyuncu
-        ctx.save();
-        ctx.translate(player.x, player.y);
-        ctx.rotate(player.angle);
-        ctx.fillStyle = player.color;
-        ctx.fillRect(-player.size/2, -player.size/2, player.size, player.size);
-        // Silah namlusu
-        ctx.fillStyle = "white";
-        ctx.fillRect(10, -2, 10, 4);
-        ctx.restore();
+        // Arka Plan Daire
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = "#ecf0f1";
+        ctx.fill();
 
-        // Mermiler
-        bullets.forEach(b => {
-            ctx.fillStyle = "#ff0";
+        // Kesir Dilimi
+        const angle = (pay / payda) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, -Math.PI / 2, (-Math.PI / 2) + angle);
+        ctx.fillStyle = "#1abc9c";
+        ctx.fill();
+        ctx.lineTo(cx, cy);
+
+        // Dilim Çizgileri
+        for (let i = 0; i < payda; i++) {
+            const lineAngle = (-Math.PI / 2) + (i * Math.PI * 2 / payda);
             ctx.beginPath();
-            ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
-            ctx.fill();
-        });
-
-        // Düşmanlar
-        enemies.forEach(en => {
-            ctx.fillStyle = "#e94560";
-            ctx.beginPath();
-            ctx.arc(en.x, en.y, en.size, 0, Math.PI*2);
-            ctx.fill();
-
-            // Kırmızı LED Efekti (Canı 5'in altına düşerse yanıp söner)
-            if (en.health < 6) {
-                if (Math.floor(Date.now() / 100) % 2) {
-                    ctx.fillStyle = "red";
-                    ctx.beginPath();
-                    ctx.arc(en.x, en.y - en.size - 5, 5, 0, Math.PI*2);
-                    ctx.fill();
-                }
-            }
-
-            // Can Metni
-            ctx.fillStyle = "white";
-            ctx.font = "bold 14px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(en.health, en.x, en.y + 5);
-        });
-
-        requestAnimationFrame(() => {
-            update();
-            draw();
-        });
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + r * Math.cos(lineAngle), cy + r * Math.sin(lineAngle));
+            ctx.strokeStyle = "#34495e";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
     }
 
-    draw();
+    // Başlangıç çizimi
+    update();
 </script>
+
 </body>
 </html>
+ 
