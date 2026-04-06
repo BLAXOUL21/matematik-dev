@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fraction Shooter Prototip</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: radial-gradient(circle, #1a1a2e, #16213e);
+            font-family: sans-serif;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Mobil Kontroller */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 30px;
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        .joystick-area {
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            position: relative;
+            pointer-events: auto;
+        }
+
+        #joystick-stick {
+            width: 50px;
+            height: 50px;
+            background: #e94560;
+            border-radius: 50%;
+            position: absolute;
+            top: 35px;
+            left: 35px;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+        }
+
+        .btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 15px;
+            border: none;
+            background: #0f3460;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 4px #08203e;
+            cursor: pointer;
+        }
+
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+
+        /* Skor ve Bilgi */
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #4dfaff;
+            font-size: 1.2rem;
+            text-shadow: 2px 2px #000;
+        }
+
+        /* Yanıp Sönen LED Efekti (Kritik Düşmanlar İçin) */
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        .led-blink {
+            animation: blink 0.2s infinite;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui">Puan: <span id="score">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="controls">
+        <div class="joystick-area" id="joystick-base">
+            <div id="joystick-stick"></div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="btn" onclick="shoot(1/2)">1/2</button>
+            <button class="btn" onclick="shoot(1/4)">1/4</button>
+            <button class="btn" onclick="shoot(1/5)">1/5</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let score = 0;
+    const player = { x: canvas.width/2, y: canvas.height/2, size: 20, color: '#4dfaff', angle: 0 };
+    const enemies = [];
+    const bullets = [];
+
+    // Joystick Mantığı
+    let moveDir = { x: 0, y: 0 };
+    const stick = document.getElementById('joystick-stick');
+    const base = document.getElementById('joystick-base');
+
+    base.addEventListener('touchstart', handleTouch);
+    base.addEventListener('touchmove', handleTouch);
+    base.addEventListener('touchend', () => {
+        stick.style.left = '35px';
+        stick.style.top = '35px';
+        moveDir = { x: 0, y: 0 };
+    });
+
+    function handleTouch(e) {
+        const touch = e.touches[0];
+        const rect = base.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        let dx = touch.clientX - centerX;
+        let dy = touch.clientY - centerY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const maxDist = 40;
+
+        if (dist > maxDist) {
+            dx *= maxDist / dist;
+            dy *= maxDist / dist;
+        }
+
+        stick.style.left = (35 + dx) + 'px';
+        stick.style.top = (35 + dy) + 'px';
+        
+        moveDir.x = dx / maxDist;
+        moveDir.y = dy / maxDist;
+        player.angle = Math.atan2(dy, dx);
+    }
+
+    // Düşman Oluşturma
+    function spawnEnemy() {
+        const size = 30 + Math.random() * 20;
+        let x, y;
+        if (Math.random() < 0.5) {
+            x = Math.random() < 0.5 ? 0 : canvas.width;
+            y = Math.random() * canvas.height;
+        } else {
+            x = Math.random() * canvas.width;
+            y = Math.random() < 0.5 ? 0 : canvas.height;
+        }
+        
+        // Düşman canı 10, 20 veya 40 gibi tam sayılar
+        const healthOptions = [10, 20, 40, 50, 100];
+        const health = healthOptions[Math.floor(Math.random() * healthOptions.length)];
+        
+        enemies.push({ x, y, health, maxHealth: health, size });
+    }
+
+    // Ateş Etme
+    window.shoot = function(fraction) {
+        bullets.push({
+            x: player.x,
+            y: player.y,
+            vx: Math.cos(player.angle) * 7,
+            vy: Math.sin(player.angle) * 7,
+            val: fraction
+        });
+    };
+
+    function update() {
+        // Oyuncu hareketi
+        player.x += moveDir.x * 4;
+        player.y += moveDir.y * 4;
+
+        // Mermiler
+        bullets.forEach((b, i) => {
+            b.x += b.vx;
+            b.y += b.vy;
+            if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i, 1);
+        });
+
+        // Düşmanlar
+        enemies.forEach((en, i) => {
+            const dx = player.x - en.x;
+            const dy = player.y - en.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            en.x += dx / dist * 1.5;
+            en.y += dy / dist * 1.5;
+
+            // Çarpışma Kontrolü
+            bullets.forEach((b, bi) => {
+                const bDist = Math.sqrt((b.x - en.x)**2 + (b.y - en.y)**2);
+                if (bDist < en.size) {
+                    en.health = Math.floor(en.health * b.val); // Kesirle çarpma
+                    bullets.splice(bi, 1);
+                    if (en.health <= 1) {
+                        enemies.splice(i, 1);
+                        score += 10;
+                        scoreEl.innerText = score;
+                    }
+                }
+            });
+        });
+
+        if (Math.random() < 0.01) spawnEnemy();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Oyuncu
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(player.angle);
+        ctx.fillStyle = player.color;
+        ctx.fillRect(-player.size/2, -player.size/2, player.size, player.size);
+        // Silah namlusu
+        ctx.fillStyle = "white";
+        ctx.fillRect(10, -2, 10, 4);
+        ctx.restore();
+
+        // Mermiler
+        bullets.forEach(b => {
+            ctx.fillStyle = "#ff0";
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // Düşmanlar
+        enemies.forEach(en => {
+            ctx.fillStyle = "#e94560";
+            ctx.beginPath();
+            ctx.arc(en.x, en.y, en.size, 0, Math.PI*2);
+            ctx.fill();
+
+            // Kırmızı LED Efekti (Canı 5'in altına düşerse yanıp söner)
+            if (en.health < 6) {
+                if (Math.floor(Date.now() / 100) % 2) {
+                    ctx.fillStyle = "red";
+                    ctx.beginPath();
+                    ctx.arc(en.x, en.y - en.size - 5, 5, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            // Can Metni
+            ctx.fillStyle = "white";
+            ctx.font = "bold 14px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(en.health, en.x, en.y + 5);
+        });
+
+        requestAnimationFrame(() => {
+            update();
+            draw();
+        });
+    }
+
+    draw();
+</script>
+</body>
+</html>
